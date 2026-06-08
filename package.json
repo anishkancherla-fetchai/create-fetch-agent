@@ -1,0 +1,55 @@
+{
+  "name": "create-fetch-agent",
+  "version": "0.1.0",
+  "description": "Scaffold runnable Fetch.ai uAgent projects with one command, then layer in AI-coding-tool context.",
+  "type": "module",
+  "bin": {
+    "create-fetch-agent": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "templates"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "prepublishOnly": "node --test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "fetch.ai",
+    "fetchai",
+    "uagents",
+    "agents",
+    "ai-agents",
+    "asi",
+    "asi-one",
+    "scaffold",
+    "create",
+    "generator",
+    "cli"
+  ],
+  "author": "Fetch.ai",
+  "license": "MIT",
+  "dependencies": {
+    "@inquirer/prompts": "^7.2.0",
+    "chalk": "^5.3.0",
+    "execa": "^9.5.0",
+    "fetch-skills": "2.0.3",
+    "fs-extra": "^11.2.0",
+    "ora": "^8.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anishkancherla-fetchai/create-fetch-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anishkancherla-fetchai/create-fetch-agent/issues"
+  },
+  "homepage": "https://github.com/anishkancherla-fetchai/create-fetch-agent#readme"
+}
