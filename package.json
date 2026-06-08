@@ -4,7 +4,7 @@
   "description": "Scaffold runnable Fetch.ai uAgent projects with one command, then layer in AI-coding-tool context.",
   "type": "module",
   "bin": {
-    "create-fetch-agent": "./bin/cli.js"
+    "create-fetch-agent": "bin/cli.js"
   },
   "files": [
     "bin",
