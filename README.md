@@ -9,7 +9,7 @@ npx create-fetch-agent my-app
 npm create fetch-agent@latest my-app
 ```
 
-The generated project runs immediately — seeds are pre-filled, addresses are
+The generated project runs immediately: seeds are pre-filled, addresses are
 derived from them, ports are assigned, and a `Makefile` starts every agent. The
 only things left as `TODO` are the workflow functions where *your* logic goes.
 
@@ -99,17 +99,17 @@ Ports are deterministic: the orchestrator owns `8003`; workers fill
 
 `create-fetch-agent` deliberately separates three concerns:
 
-1. **`create-fetch-agent` (this tool)** — owns project structure, runnable starter
+1. **`create-fetch-agent` (this tool)**: owns project structure, runnable starter
    code, seed generation, dependency install, and Agentverse guidance.
-2. **The [`fetch-help`](https://github.com/harvest7777/fetch-help) template** — the
+2. **The [`fetch-help`](https://github.com/harvest7777/fetch-help) template**: the
    canonical orchestrator + workers architecture this tool stamps out and
    parameterizes (names, counts, ports, seeds).
-3. **[`fetch-skills`](https://www.npmjs.com/package/fetch-skills)** — a context
+3. **[`fetch-skills`](https://www.npmjs.com/package/fetch-skills)**: a context
    installer that writes `SKILL.md` instruction files for AI coding tools. It
    writes *no code*; this tool delegates the "AI-editor context" step to it
    instead of reinventing thousands of lines of skill markdown.
 
-**Design philosophy — hybrid:** emit a *minimal runnable skeleton* (works on the
+**Design philosophy: hybrid:** emit a *minimal runnable skeleton* (works on the
 first run with no AI tool) whose extension points are pre-marked, then install
 fetch-skills context so your AI tool can flesh those points out correctly.
 
