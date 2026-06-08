@@ -1,6 +1,6 @@
 {
   "name": "create-fetch-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scaffold runnable Fetch.ai uAgent projects with one command, then layer in AI-coding-tool context.",
   "type": "module",
   "bin": {
