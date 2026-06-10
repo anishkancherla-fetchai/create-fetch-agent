@@ -51,7 +51,7 @@ build-backend = "poetry.core.masonry.api"
 export function manualInstallCommands(pythonManager) {
   switch (pythonManager) {
     case "uv":
-      return ["uv venv", "uv pip install -r requirements.txt"];
+      return ["uv venv --python 3.12", "uv pip install -r requirements.txt"];
     case "poetry":
       return ["poetry install"];
     default:
@@ -107,7 +107,7 @@ export async function bootstrap(answers, { cwd, logger = console } = {}) {
       if (!(await commandExists("uv"))) {
         return printManual(logger, manual, "`uv` was not found on your PATH.");
       }
-      await runStep({ label: "Creating virtual environment (uv venv)", cmd: "uv", args: ["venv"], cwd, logger });
+      await runStep({ label: "Creating virtual environment (uv venv --python 3.12)", cmd: "uv", args: ["venv", "--python", "3.12"], cwd, logger });
       await runStep({
         label: "Installing dependencies (uv pip install)",
         cmd: "uv",

@@ -158,7 +158,7 @@ function renderEnvExample(names) {
 function runHints(pythonManager) {
   if (pythonManager === "uv") {
     return {
-      install: ["uv venv", "uv pip install -r requirements.txt"],
+      install: ["uv venv --python 3.12", "uv pip install -r requirements.txt"],
       prefix: "uv run",
     };
   }
