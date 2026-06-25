@@ -29,10 +29,10 @@ test("normalizeWorkerName produces identifier-safe names", () => {
   assert.equal(normalizeWorkerName("123go"), "w_123go");
 });
 
-test("wizard collects orchestrator answers headlessly", async () => {
+test("wizard collects multi-agent answers headlessly", async () => {
   const prompts = makePrompts({
-    input: ["alice", "bob"], // worker names (project name comes from argv)
-    select: ["orchestrator_workers", "uv", false], // buildType, python, register
+    input: ["alice", "bob"], // agent names (project name comes from argv)
+    select: ["multi_agent", "uv", false], // buildType, python, register
     number: [2],
     checkbox: [["cursor", "agents"]],
     confirm: [true],
@@ -46,7 +46,7 @@ test("wizard collects orchestrator answers headlessly", async () => {
   });
 
   assert.equal(answers.projectName, "my-app");
-  assert.equal(answers.buildType, "orchestrator_workers");
+  assert.equal(answers.buildType, "multi_agent");
   assert.deepEqual(answers.workers, ["alice", "bob"]);
   assert.equal(answers.pythonManager, "uv");
   assert.deepEqual(answers.aiTargets, ["cursor", "agents"]);

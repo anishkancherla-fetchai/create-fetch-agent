@@ -32,10 +32,12 @@ export function selectedSkillNames(answers) {
   const pkg = PACKAGE_SKILL_BY_MANAGER[answers.pythonManager];
   if (pkg) names.push(pkg);
 
-  if (answers.buildType === "chat_agent" || answers.buildType === "orchestrator_workers") {
+  // Every build type we generate speaks the chat protocol (single, chat, and
+  // multi-agent are all ASI:One-ready), so chat-protocol always applies.
+  if (answers.buildType === "payment_agent") {
+    names.push("chat-protocol", "payment-protocol", "fet-payment-protocol", "stripe-payment-protocol");
+  } else {
     names.push("chat-protocol");
-  } else if (answers.buildType === "payment_agent") {
-    names.push("payment-protocol", "fet-payment-protocol", "stripe-payment-protocol");
   }
 
   return names;

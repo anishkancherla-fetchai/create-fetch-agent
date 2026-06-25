@@ -3,20 +3,18 @@ import { fileURLToPath } from "node:url";
 import fs from "fs-extra";
 
 import {
-  workerPorts,
-  renderWorker,
-  renderConfig,
-  renderChatProtocol,
-  renderOrchestratorAgent,
-  renderMakefile,
-  renderEnv,
+  agentPorts,
+  renderMicroAgent,
+  renderMultiAgentMakefile,
+  renderMultiAgentEnv,
+  renderPaymentEnv,
+  renderPaymentEnvBody,
   renderSingleAgent,
   renderSingleEnv,
   renderSingleMakefile,
   SINGLE_AGENT_PORT,
-  ORCHESTRATOR_PORT,
 } from "./workers.js";
-import { renderPyproject } from "./env.js";
+import { renderPyproject, renderUvPyproject, PYTHON_VERSION } from "./env.js";
 import { seed } from "./seeds.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +24,28 @@ export const PACKAGE_ROOT = path.resolve(__dirname, "..");
 export const TEMPLATES_DIR = path.join(PACKAGE_ROOT, "templates");
 
 /** Build types that share the single-agent base. */
-const SINGLE_BASE_TYPES = new Set(["single_agent", "chat_agent", "payment_agent"]);
+const SINGLE_BASE_TYPES = new Set(["single_agent", "chat_agent"]);
+/** Build types that generate many independent, ASI:One-routed agents. */
+const MULTI_AGENT_TYPES = new Set(["multi_agent", "orchestrator_workers"]);
+
+/** Shared dependency source (identical deps across the chat-based build types). */
+const REQUIREMENTS_SRC = path.join(TEMPLATES_DIR, "single-agent", "requirements.txt");
+
+/** The payment agent needs newer uagents pins (payment protocol) + extra SDKs. */
+const PAYMENT_DIR = path.join(TEMPLATES_DIR, "payment-agent");
+const PAYMENT_REQUIREMENTS_SRC = path.join(PAYMENT_DIR, "requirements.txt");
+const PAYMENT_EXTRA_DEPS = ["cosmpy==0.11.1", "stripe", "openai"];
+/** Code files vended verbatim for the payment agent (relative to PAYMENT_DIR). */
+const PAYMENT_CODE_FILES = [
+  "agent.py",
+  "protocols/__init__.py",
+  "protocols/chat_proto.py",
+  "protocols/payment_proto.py",
+  "stripe_payments/__init__.py",
+  "stripe_payments/checkout.py",
+  "fet_payments/__init__.py",
+  "fet_payments/ledger.py",
+];
 
 /**
  * Turn a project name into a python-identifier-safe agent name.
@@ -55,6 +74,27 @@ async function copyFile(srcAbs, targetDir, relPath, written) {
 }
 
 /**
+ * Write the dependency manifest that matches the chosen package manager, so the
+ * generated project is a *real* project for that tool (not a requirements.txt
+ * that contradicts the installed package skill):
+ *   - uv     -> PEP 621 pyproject.toml + .python-version (managed by `uv sync`)
+ *   - poetry -> Poetry pyproject.toml (managed by `poetry install`)
+ *   - pip    -> requirements.txt (the classic venv + pip workflow)
+ */
+async function writeDependencyManifest(answers, { targetDir, written, requirementsSrc = REQUIREMENTS_SRC, extraDeps = [] }) {
+  const reqs = await fs.readFile(requirementsSrc, "utf8");
+  if (answers.pythonManager === "uv") {
+    await writeFile(targetDir, "pyproject.toml", renderUvPyproject(answers.projectName, reqs, extraDeps), written);
+    await writeFile(targetDir, ".python-version", `${PYTHON_VERSION}\n`, written);
+  } else if (answers.pythonManager === "poetry") {
+    await writeFile(targetDir, "pyproject.toml", renderPyproject(answers.projectName, reqs, extraDeps), written);
+  } else {
+    const extra = extraDeps.length ? `${extraDeps.join("\n")}\n` : "";
+    await writeFile(targetDir, "requirements.txt", `${reqs.trimEnd()}\n${extra}`, written);
+  }
+}
+
+/**
  * Scaffold a project from a wizard answers object.
  *
  * @param {object} answers
@@ -71,8 +111,10 @@ export async function scaffold(answers, opts = {}) {
 
   const written = [];
 
-  if (answers.buildType === "orchestrator_workers") {
-    await scaffoldOrchestratorWorkers(answers, { targetDir, seedFn, written });
+  if (answers.buildType === "payment_agent") {
+    await scaffoldPaymentAgent(answers, { targetDir, seedFn, written });
+  } else if (MULTI_AGENT_TYPES.has(answers.buildType)) {
+    await scaffoldMultiAgent(answers, { targetDir, seedFn, written });
   } else if (SINGLE_BASE_TYPES.has(answers.buildType)) {
     await scaffoldSingleAgent(answers, { targetDir, seedFn, written });
   } else {
@@ -83,65 +125,78 @@ export async function scaffold(answers, opts = {}) {
   return { targetDir, written, buildType: answers.buildType };
 }
 
-async function scaffoldOrchestratorWorkers(answers, ctx) {
+/**
+ * Multiple independent, ASI:One-routed agents. There is no orchestrator agent:
+ * every agent speaks the chat protocol directly, registers on Agentverse, and
+ * ASI:One discovers + routes to whichever fits the user's request.
+ */
+async function scaffoldMultiAgent(answers, ctx) {
   const { targetDir, seedFn, written } = ctx;
   const names = answers.workers;
-  const ports = workerPorts(names.length);
-  const staticDir = path.join(TEMPLATES_DIR, "orchestrator-workers");
+  const ports = agentPorts(names.length);
 
-  // Static, copied verbatim.
-  await copyFile(path.join(staticDir, "agents/__init__.py"), targetDir, "agents/__init__.py", written);
-  await copyFile(path.join(staticDir, "agents/models/__init__.py"), targetDir, "agents/models/__init__.py", written);
-  await copyFile(path.join(staticDir, "agents/models/models.py"), targetDir, "agents/models/models.py", written);
-  await copyFile(path.join(staticDir, "agents/services/__init__.py"), targetDir, "agents/services/__init__.py", written);
-  await copyFile(path.join(staticDir, "agents/services/state_service.py"), targetDir, "agents/services/state_service.py", written);
-  await copyFile(path.join(staticDir, "agents/orchestrator/__init__.py"), targetDir, "agents/orchestrator/__init__.py", written);
-  await copyFile(path.join(staticDir, "requirements.txt"), targetDir, "requirements.txt", written);
   await copyFile(path.join(TEMPLATES_DIR, "gitignore"), targetDir, ".gitignore", written);
-
-  // Generated (name/count-driven).
-  await writeFile(targetDir, "agents/models/config.py", renderConfig(names), written);
-  await writeFile(targetDir, "agents/orchestrator/orchestrator_agent.py", renderOrchestratorAgent(), written);
-  await writeFile(targetDir, "agents/orchestrator/chat_protocol.py", renderChatProtocol(names), written);
+  await writeFile(targetDir, "agents/__init__.py", "", written);
 
   for (let i = 0; i < names.length; i += 1) {
     const name = names[i];
-    const port = ports[i];
     await writeFile(targetDir, `agents/${name}/__init__.py`, "", written);
-    await writeFile(targetDir, `agents/${name}/${name}_agent.py`, renderWorker(name, port), written);
+    await writeFile(targetDir, `agents/${name}/${name}_agent.py`, renderMicroAgent(name, ports[i]), written);
   }
 
-  await writeFile(targetDir, ".env", renderEnv(names, seedFn), written);
+  await writeFile(targetDir, ".env", renderMultiAgentEnv(names, seedFn), written);
   await writeFile(targetDir, ".env.example", renderEnvExample(names), written);
-  await writeFile(targetDir, "Makefile", renderMakefile(names), written);
+  await writeFile(targetDir, "Makefile", renderMultiAgentMakefile(names, answers.pythonManager), written);
 
-  if (answers.pythonManager === "poetry") {
-    const reqs = await fs.readFile(path.join(staticDir, "requirements.txt"), "utf8");
-    await writeFile(targetDir, "pyproject.toml", renderPyproject(answers.projectName, reqs), written);
-  }
+  await writeDependencyManifest(answers, { targetDir, written });
 
-  await writeFile(targetDir, "README.md", renderOrchestratorReadme(answers, names, ports), written);
+  await writeFile(targetDir, "README.md", renderMultiAgentReadme(answers, names, ports), written);
 }
 
 async function scaffoldSingleAgent(answers, ctx) {
   const { targetDir, seedFn, written } = ctx;
   const name = toAgentName(answers.projectName);
-  const staticDir = path.join(TEMPLATES_DIR, "single-agent");
 
-  await copyFile(path.join(staticDir, "requirements.txt"), targetDir, "requirements.txt", written);
   await copyFile(path.join(TEMPLATES_DIR, "gitignore"), targetDir, ".gitignore", written);
 
   await writeFile(targetDir, "agent.py", renderSingleAgent(name, SINGLE_AGENT_PORT), written);
   await writeFile(targetDir, ".env", renderSingleEnv(seedFn), written);
   await writeFile(targetDir, ".env.example", "AGENT_SEED_PHRASE=\n", written);
-  await writeFile(targetDir, "Makefile", renderSingleMakefile(), written);
+  await writeFile(targetDir, "Makefile", renderSingleMakefile(answers.pythonManager), written);
 
-  if (answers.pythonManager === "poetry") {
-    const reqs = await fs.readFile(path.join(staticDir, "requirements.txt"), "utf8");
-    await writeFile(targetDir, "pyproject.toml", renderPyproject(answers.projectName, reqs), written);
-  }
+  await writeDependencyManifest(answers, { targetDir, written });
 
   await writeFile(targetDir, "README.md", renderSingleReadme(answers, name), written);
+}
+
+/**
+ * A pay-to-use agent: speaks the Agent Chat Protocol AND the Agent Payment
+ * Protocol, advertising BOTH Stripe (card) and on-chain FET in one
+ * RequestPayment. The full request -> commit -> verify -> complete flow is
+ * generated; the builder only pastes Stripe test keys and fills in the paid
+ * action. Code is vended verbatim from a single-concern file layout.
+ */
+async function scaffoldPaymentAgent(answers, ctx) {
+  const { targetDir, seedFn, written } = ctx;
+
+  await copyFile(path.join(TEMPLATES_DIR, "gitignore"), targetDir, ".gitignore", written);
+
+  for (const rel of PAYMENT_CODE_FILES) {
+    await copyFile(path.join(PAYMENT_DIR, rel), targetDir, rel, written);
+  }
+
+  await writeFile(targetDir, ".env", renderPaymentEnv(seedFn), written);
+  await writeFile(targetDir, ".env.example", renderPaymentEnvBody(""), written);
+  await writeFile(targetDir, "Makefile", renderSingleMakefile(answers.pythonManager), written);
+
+  await writeDependencyManifest(answers, {
+    targetDir,
+    written,
+    requirementsSrc: PAYMENT_REQUIREMENTS_SRC,
+    extraDeps: PAYMENT_EXTRA_DEPS,
+  });
+
+  await writeFile(targetDir, "README.md", renderPaymentReadme(answers), written);
 }
 
 function renderEnvExample(names) {
@@ -149,7 +204,6 @@ function renderEnvExample(names) {
     "# Set a unique, random seed phrase per agent (no spaces).",
     "# `create-fetch-agent` pre-fills these in .env for you.",
     "",
-    "ORCHESTRATOR_SEED_PHRASE=",
     ...names.map((n) => `${n.toUpperCase()}_SEED_PHRASE=`),
     "",
   ].join("\n");
@@ -157,63 +211,56 @@ function renderEnvExample(names) {
 
 function runHints(pythonManager) {
   if (pythonManager === "uv") {
-    return {
-      install: ["uv venv --python 3.12", "uv pip install -r requirements.txt"],
-      prefix: "uv run",
-    };
+    return { install: ["uv sync"] };
   }
   if (pythonManager === "poetry") {
-    return {
-      install: ["poetry install"],
-      prefix: "poetry run",
-    };
+    return { install: [`poetry env use python${PYTHON_VERSION}`, "poetry install"] };
   }
   return {
-    install: ["python3.12 -m venv .venv", "source .venv/bin/activate", "pip install -r requirements.txt"],
-    prefix: "",
+    install: [`python${PYTHON_VERSION} -m venv .venv`, "source .venv/bin/activate", "pip install -r requirements.txt"],
   };
 }
 
-function renderOrchestratorReadme(answers, names, ports) {
+function renderMultiAgentReadme(answers, names, ports) {
   const hints = runHints(answers.pythonManager);
-  const installBlock = hints.install.map((c) => c).join("\n");
-  const mk = (target) => (hints.prefix ? `${hints.prefix} make ${target}` : `make ${target}`);
-  const workerRows = names
-    .map((n, i) => `| ${n} | ${ports[i]} | \`agents/${n}/${n}_agent.py\` | \`${mk(n)}\` |`)
+  const installBlock = hints.install.join("\n");
+  const rows = names
+    .map((n, i) => `| ${n} | ${ports[i]} | \`agents/${n}/${n}_agent.py\` | \`make ${n}\` |`)
     .join("\n");
+  const runBlocks = names.map((n) => `\`\`\`bash\nmake ${n}\n\`\`\``).join("\n\n");
 
   return `# ${answers.projectName}
 
-A Fetch.ai multi-agent system: an **orchestrator** (the sole ASI:One bridge) that
-routes incoming chat messages to specialized **worker** agents. Generated with
+A Fetch.ai multi-agent project: several **independent** agents, each an expert at
+one task. There is **no orchestrator** — every agent speaks the Agent Chat
+Protocol and registers on Agentverse, and **ASI:One discovers and routes** each
+request to the right agent. Generated with
 [create-fetch-agent](https://github.com/anishkancherla-fetchai/create-fetch-agent).
 
-## Architecture
+## How routing works
 
 \`\`\`
-ASI:One / Agentverse
-        │  (chat protocol)
-        ▼
-  orchestrator  (port ${ORCHESTRATOR_PORT})  ──►  routes SharedAgentState by name
-        ▲                                   │
-        └──────── result ◄──────────────────┘
-                                            ▼
-                              ${names.join(", ")}
+                 user request
+                      │
+                      ▼
+                  ASI:One   ──discovers + ranks agents on Agentverse──►
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+${names.map((n) => `   ${n}`).join("\n")}
 \`\`\`
 
-All agents share one message contract (\`SharedAgentState\` in
-\`agents/models/models.py\`). The orchestrator owns the chat protocol and relays
-the worker's \`result\` back to the user. State persists per session via
-\`InMemoryStateService\` (swap it for Redis/Postgres without touching the pipeline).
-Addresses are derived from seeds in \`agents/models/config.py\`, so there are no
-hardcoded addresses.
+ASI:One's agentic model searches the Agentverse marketplace and picks the agent
+whose description best matches the request. So each agent's **description and
+Agentverse profile (README + keywords) is what makes routing work** — fill in the
+\`AGENT_DESCRIPTION\` in each agent file with a specific, one-line summary of what
+that agent does.
 
 ## Agents
 
 | Agent | Port | File | Run |
 | ----- | ---- | ---- | --- |
-| orchestrator | ${ORCHESTRATOR_PORT} | \`agents/orchestrator/orchestrator_agent.py\` | \`${mk("orchestrator")}\` |
-${workerRows}
+${rows}
 
 ## Setup
 
@@ -225,48 +272,130 @@ ${installBlock}
 
 ## Run
 
-Each agent runs in its own terminal. Start the orchestrator first:
+Each agent runs in its own terminal:
 
-\`\`\`bash
-${mk("orchestrator")}
-\`\`\`
-
-${names.map((n) => `\`\`\`bash\n${mk(n)}\n\`\`\``).join("\n\n")}
+${runBlocks}
 
 ## Where to add your logic
 
-Each worker has a \`<name>_workflow(state)\` function — the single extension point.
-Read \`state.query\`, do the work, write \`state.result\`. For example, in
-\`agents/${names[0]}/${names[0]}_agent.py\`:
+Each agent has a \`<name>_workflow(query)\` function — the single extension point.
+Read the query, do the one thing that agent is an expert at, return a response.
+For example, in \`agents/${names[0]}/${names[0]}_agent.py\`:
 
 \`\`\`python
-def ${names[0]}_workflow(state: SharedAgentState) -> SharedAgentState:
-    state.result = my_llm_or_rag_call(state.query)
-    return state
+def ${names[0]}_workflow(query: str) -> str:
+    return my_llm_or_rag_call(query)
 \`\`\`
 
 ## Talk to it on ASI:One
 
-The agents set \`mailbox=True\` and \`publish_agent_details=True\`, so you can
-connect them through the Agentverse inspector and chat via ASI:One. See
-"Register on Agentverse" output from the scaffolder, or the
-[Agentverse docs](https://agentverse.ai). The inspector URL is logged on startup.
+Every agent sets \`mailbox=True\` and \`publish_agent_details=True\`, so connect each
+one through its Agentverse inspector URL (logged on startup) and give it a clear
+description. Then chat on [ASI:One](https://asi1.ai) — its agentic model routes
+your request to whichever agent fits. See the "Register on Agentverse" output
+from the scaffolder, or the [Agentverse docs](https://agentverse.ai).
 
-## REST hooks (custom frontend)
+> **The chat protocol is already wired** in every agent (\`agent.include(chat_proto,
+> publish_manifest=True)\`). This is what makes each agent chattable + discoverable
+> — the #1 thing builders forget. You'll see \`Manifest published successfully:
+> AgentChatProtocol\` in each agent's startup logs, and Agentverse's "Add Chat
+> Protocol" checklist item is already satisfied. Connecting a mailbox alone is
+> **not** enough; don't remove the \`publish_manifest=True\` line.
+`;
+}
 
-The orchestrator exposes \`/health\` and \`/message\` on port ${ORCHESTRATOR_PORT}:
+function renderPaymentReadme(answers) {
+  const hints = runHints(answers.pythonManager);
+  const installBlock = hints.install.join("\n");
+
+  return `# ${answers.projectName}
+
+A Fetch.ai **pay-to-use agent**: it speaks the Agent Chat Protocol *and* the
+Agent Payment Protocol, so a user must pay before the agent runs its paid
+action. It advertises **both Stripe (card) and on-chain FET** in a single
+payment request — the user picks one. Generated with
+[create-fetch-agent](https://github.com/anishkancherla-fetchai/create-fetch-agent).
+
+## How a payment works
+
+\`\`\`
+user chats  ──►  agent sends RequestPayment (Stripe card + FET)
+                      │
+                      ▼
+        Agentverse UI shows embedded Stripe checkout (Approve / Reject)
+                      │
+       user pays with test card 4242 4242 4242 4242
+                      │
+                      ▼
+   agent verifies payment is "paid"  ──►  CompletePayment  ──►  run_paid_action()
+\`\`\`
+
+## Setup
+
+The agent's seed is already generated in \`.env\`. To accept card payments, paste
+your **Stripe TEST keys** into \`.env\` (everything else has sensible defaults):
+
+\`\`\`dotenv
+STRIPE_SECRET_KEY=sk_test_...        # dashboard.stripe.com/test/apikeys
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_AMOUNT_CENTS=100              # 100 = $1.00, 5000 = $50.00
+\`\`\`
+
+Then install dependencies:
 
 \`\`\`bash
-curl http://localhost:${ORCHESTRATOR_PORT}/health
-curl -X POST http://localhost:${ORCHESTRATOR_PORT}/message -H "Content-Type: application/json" -d '{"content":"hi"}'
+${installBlock}
 \`\`\`
+
+## Run
+
+\`\`\`bash
+make run
+\`\`\`
+
+The agent starts on port ${SINGLE_AGENT_PORT} and logs its address + an
+Agentverse inspector URL. Connect it through the inspector, then chat with it —
+it will reply with a payment request. Pay with Stripe test card
+\`4242 4242 4242 4242\` (any future expiry, any CVC) to complete the flow.
+
+## Where to add your logic
+
+The whole payment flow is done. The **one** function you own is
+\`run_paid_action(...)\` in \`protocols/chat_proto.py\` — it runs automatically once
+a payment is verified. By default it replies with a placeholder (so the flow
+works with only Stripe keys); set \`ASI_ONE_API_KEY\` in \`.env\` to route the
+prompt to ASI:One instead, or replace the body with your real paid service
+(image gen, API call, data lookup, etc.).
+
+## File layout
+
+| File | Concern |
+| ---- | ------- |
+| \`agent.py\` | entrypoint: load env, create agent, include both protocols |
+| \`protocols/chat_proto.py\` | chat handling + \`run_paid_action\` (your logic) |
+| \`protocols/payment_proto.py\` | payment dispatch (Stripe + FET), verification |
+| \`stripe_payments/checkout.py\` | the only file that touches the Stripe SDK |
+| \`fet_payments/ledger.py\` | the only file that touches the FET ledger (cosmpy) |
+
+## Card vs. crypto, or both
+
+Both rails are on by default. Toggle in \`.env\`:
+
+- \`ENABLE_STRIPE_PAYMENTS=false\` → FET-only
+- \`ENABLE_FET_PAYMENTS=false\` → Stripe-only
+
+## Going live
+
+Defaults are **test mode**: Stripe test keys + FET stable-testnet. Before a real
+deploy, switch to live Stripe keys, set \`FET_USE_TESTNET=false\`, and set
+\`AGENT_NETWORK=mainnet\` (then fund the agent wallet yourself).
 `;
 }
 
 function renderSingleReadme(answers, name) {
   const hints = runHints(answers.pythonManager);
   const installBlock = hints.install.join("\n");
-  const runCmd = hints.prefix ? `${hints.prefix} make run` : "make run";
+  const runCmd = "make run";
   const typeLabel =
     answers.buildType === "chat_agent"
       ? "chat agent (ASI:One ready)"
@@ -299,11 +428,11 @@ Agentverse inspector URL.
 
 ## Where to add your logic
 
-\`agent.py\` has an \`agent_workflow(query)\` function — the single extension point.
+\`agent.py\` has a \`${name}_workflow(query)\` function — the single extension point.
 Return the response string for a given user query:
 
 \`\`\`python
-def agent_workflow(query: str) -> str:
+def ${name}_workflow(query: str) -> str:
     return my_llm_call(query)
 \`\`\`
 
@@ -312,5 +441,12 @@ def agent_workflow(query: str) -> str:
 \`mailbox=True\` and \`publish_agent_details=True\` are set, so connect \`${name}\`
 through the Agentverse inspector and chat with it via ASI:One. The inspector URL
 is logged on startup.
+
+> **The chat protocol is already wired** (\`agent.include(chat_proto,
+> publish_manifest=True)\`). This is what makes the agent chattable + discoverable
+> — the #1 thing builders forget. You'll see \`Manifest published successfully:
+> AgentChatProtocol\` in the startup logs, and Agentverse's "Add Chat Protocol"
+> checklist item is already satisfied. Connecting a mailbox alone is **not**
+> enough; don't remove the \`publish_manifest=True\` line.
 `;
 }

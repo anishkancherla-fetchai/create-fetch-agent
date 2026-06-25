@@ -142,8 +142,9 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Internal build brief (keep local, never publish or commit)
+# Internal docs (keep local, never publish or commit)
 create-fetch-agent-BUILD.md
+CLI-COMPARISON.md
 
 # Generated test projects from manual CLI runs
 /test-app/

@@ -13,12 +13,6 @@ function parseArgs(argv) {
   return argv.filter((a) => !a.startsWith("-"));
 }
 
-function runPrefix(pythonManager) {
-  if (pythonManager === "uv") return "uv run ";
-  if (pythonManager === "poetry") return "poetry run ";
-  return "";
-}
-
 function printBanner(logger) {
   logger.log("");
   logger.log(chalk.bold.hex("#1A6FE8")("  create-fetch-agent"));
@@ -28,7 +22,6 @@ function printBanner(logger) {
 
 function printNextSteps(logger, { answers, targetDir, skillPaths }) {
   const rel = path.relative(process.cwd(), targetDir) || ".";
-  const prefix = runPrefix(answers.pythonManager);
 
   logger.log("");
   logger.log(chalk.bold.green("✔ Project ready: ") + chalk.cyan(rel));
@@ -43,14 +36,18 @@ function printNextSteps(logger, { answers, targetDir, skillPaths }) {
   }
 
   logger.log("");
-  if (answers.buildType === "orchestrator_workers") {
-    logger.log(chalk.dim("  Start each agent in its own terminal (orchestrator first):"));
-    logger.log(`  ${chalk.cyan(`${prefix}make orchestrator`)}`);
+  if (answers.buildType === "multi_agent") {
+    logger.log(chalk.dim("  Start each agent in its own terminal:"));
     for (const n of answers.workers) {
-      logger.log(`  ${chalk.cyan(`${prefix}make ${n}`)}`);
+      logger.log(`  ${chalk.cyan(`make ${n}`)}`);
     }
+  } else if (answers.buildType === "payment_agent") {
+    logger.log(chalk.dim("  Paste your Stripe TEST keys into .env, then start the agent:"));
+    logger.log(`  ${chalk.cyan("STRIPE_SECRET_KEY / STRIPE_PUBLISHABLE_KEY in .env")}`);
+    logger.log(`  ${chalk.cyan("make run")}`);
+    logger.log(chalk.dim("  Then chat with it and pay with Stripe test card 4242 4242 4242 4242."));
   } else {
-    logger.log(`  ${chalk.cyan(`${prefix}make run`)}`);
+    logger.log(`  ${chalk.cyan("make run")}`);
   }
 
   if (skillPaths && skillPaths.length) {

@@ -12,7 +12,7 @@ import { silentLogger, tmpDir } from "./helpers.js";
 
 test("selectedSkillNames maps manager + build type to skills", () => {
   assert.deepEqual(
-    selectedSkillNames({ pythonManager: "uv", buildType: "orchestrator_workers" }),
+    selectedSkillNames({ pythonManager: "uv", buildType: "multi_agent" }),
     ["uv-package", "chat-protocol"],
   );
   assert.deepEqual(
@@ -21,18 +21,18 @@ test("selectedSkillNames maps manager + build type to skills", () => {
   );
   assert.deepEqual(
     selectedSkillNames({ pythonManager: "pip", buildType: "single_agent" }),
-    ["python-venv-package"],
+    ["python-venv-package", "chat-protocol"],
   );
   assert.deepEqual(
     selectedSkillNames({ pythonManager: "uv", buildType: "payment_agent" }),
-    ["uv-package", "payment-protocol", "fet-payment-protocol", "stripe-payment-protocol"],
+    ["uv-package", "chat-protocol", "payment-protocol", "fet-payment-protocol", "stripe-payment-protocol"],
   );
 });
 
 test("expectedSkillPaths uses real fetch-skills locations (not .cursor/rules)", () => {
   const paths = expectedSkillPaths({
     pythonManager: "uv",
-    buildType: "orchestrator_workers",
+    buildType: "multi_agent",
     aiTargets: ["cursor", "claude", "antigravity", "agents"],
   });
   assert.ok(paths.includes(".cursor/skills/uv-package/SKILL.md"));
@@ -46,7 +46,7 @@ test("installSkills writes SKILL.md files and AGENTS.md to disk", async () => {
   const targetRoot = tmpDir();
   const answers = {
     pythonManager: "uv",
-    buildType: "orchestrator_workers",
+    buildType: "multi_agent",
     aiTargets: ["cursor", "agents"],
   };
   const { paths } = await installSkills(answers, { targetRoot, logger: silentLogger });

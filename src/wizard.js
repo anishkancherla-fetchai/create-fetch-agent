@@ -67,37 +67,35 @@ export async function runWizard({
     choices: [
       { name: "Single agent", value: "single_agent" },
       { name: "Chat agent (ASI:One ready)", value: "chat_agent" },
-      { name: "Orchestrator + workers", value: "orchestrator_workers" },
+      { name: "Multiple agents (ASI:One routes between them)", value: "multi_agent" },
       { name: "Payment agent (FET + Stripe)", value: "payment_agent" },
     ],
   });
 
   let workers = [];
-  if (buildType === "orchestrator_workers") {
+  if (buildType === "multi_agent") {
     const count = await prompts.number({
-      message: "How many worker agents?",
+      message: "How many agents?",
       default: 2,
       min: 1,
       max: 10,
     });
     const n = Number(count) || 2;
-    const taken = new Set(["orchestrator"]);
+    const taken = new Set();
     for (let i = 0; i < n; i += 1) {
-      const fallback = DEFAULT_WORKER_NAMES[i] || `worker${i + 1}`;
       // Find a default that isn't already taken.
-      let def = fallback;
       let bump = i;
+      let def = DEFAULT_WORKER_NAMES[bump] || `agent${bump + 1}`;
       while (taken.has(def)) {
         bump += 1;
-        def = DEFAULT_WORKER_NAMES[bump] || `worker${bump + 1}`;
+        def = DEFAULT_WORKER_NAMES[bump] || `agent${bump + 1}`;
       }
       const raw = await prompts.input({
-        message: `Worker ${i + 1} name:`,
+        message: `Agent ${i + 1} name:`,
         default: def,
         validate: (v) => {
           const norm = normalizeWorkerName(v);
           if (!norm) return "Enter a valid name (letters/numbers).";
-          if (norm === "orchestrator") return '"orchestrator" is reserved.';
           if (taken.has(norm)) return `"${norm}" is already used.`;
           return true;
         },

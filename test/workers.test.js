@@ -2,64 +2,77 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  workerPorts,
-  renderWorker,
-  renderConfig,
-  renderChatProtocol,
-  renderMakefile,
-  renderEnv,
-  ORCHESTRATOR_PORT,
+  agentPorts,
+  pythonInvocation,
+  renderChatAgent,
+  renderMicroAgent,
+  renderMultiAgentMakefile,
+  renderMultiAgentEnv,
+  renderSingleAgent,
+  SINGLE_AGENT_PORT,
+  MULTI_AGENT_BASE_PORT,
 } from "../src/workers.js";
 import { makeSeedFn } from "./helpers.js";
 
-test("workerPorts skips the orchestrator port (8003)", () => {
-  assert.equal(ORCHESTRATOR_PORT, 8003);
-  assert.deepEqual(workerPorts(1), [8001]);
-  assert.deepEqual(workerPorts(2), [8001, 8002]);
-  assert.deepEqual(workerPorts(4), [8001, 8002, 8004, 8005]);
-  assert.ok(!workerPorts(6).includes(8003));
+test("agentPorts assigns sequential ports from the base", () => {
+  assert.equal(SINGLE_AGENT_PORT, 8000);
+  assert.equal(MULTI_AGENT_BASE_PORT, 8001);
+  assert.deepEqual(agentPorts(1), [8001]);
+  assert.deepEqual(agentPorts(3), [8001, 8002, 8003]);
 });
 
-test("renderWorker injects name, seed, port and a workflow extension point", () => {
-  const code = renderWorker("alice", 8001);
-  assert.match(code, /from agents\.models\.config import ALICE_SEED/);
-  assert.match(code, /seed=ALICE_SEED/);
+test("pythonInvocation matches the package manager", () => {
+  assert.equal(pythonInvocation("uv"), "uv run python");
+  assert.equal(pythonInvocation("poetry"), "poetry run python");
+  assert.equal(pythonInvocation("pip"), ".venv/bin/python");
+});
+
+test("renderChatAgent builds an independent, ASI:One-ready agent", () => {
+  const code = renderChatAgent("alice", 8001, { seedEnv: "ALICE_SEED_PHRASE" });
+  assert.match(code, /name="alice"/);
+  assert.match(code, /seed=os\.getenv\("ALICE_SEED_PHRASE"\)/);
   assert.match(code, /port=8001/);
-  assert.match(code, /def alice_workflow\(state: SharedAgentState\)/);
-  assert.match(code, /@alice\.on_message\(SharedAgentState\)/);
-});
-
-test("renderConfig declares a seed and address per worker plus orchestrator", () => {
-  const code = renderConfig(["alice", "bob"]);
-  assert.match(code, /ALICE_SEED = os\.getenv\("ALICE_SEED_PHRASE"\)/);
-  assert.match(code, /BOB_SEED = os\.getenv\("BOB_SEED_PHRASE"\)/);
-  assert.match(code, /ORCHESTRATOR_SEED = os\.getenv\("ORCHESTRATOR_SEED_PHRASE"\)/);
-  assert.match(code, /ALICE_ADDRESS = Identity\.from_seed\(seed=ALICE_SEED, index=0\)\.address/);
-  assert.match(code, /BOB_ADDRESS = Identity\.from_seed\(seed=BOB_SEED, index=0\)\.address/);
-});
-
-test("renderChatProtocol generates a routing branch per worker and is tz-aware", () => {
-  const code = renderChatProtocol(["alice", "bob"]);
-  assert.match(code, /from agents\.models\.config import ALICE_ADDRESS, BOB_ADDRESS/);
-  assert.match(code, /if "alice" in text_lower:/);
-  assert.match(code, /await ctx\.send\(ALICE_ADDRESS, state\)/);
-  assert.match(code, /if "bob" in text_lower:/);
-  assert.match(code, /await ctx\.send\(BOB_ADDRESS, state\)/);
+  assert.match(code, /mailbox=True/);
+  assert.match(code, /publish_agent_details=True/);
+  assert.match(code, /chat_protocol_spec/);
+  assert.match(code, /AGENT_DESCRIPTION = /);
+  assert.match(code, /def alice_workflow\(query: str\)/);
+  assert.match(code, /session_id = str\(ctx\.session\)/);
   // tz-aware everywhere; no naive datetime.now() calls.
   assert.match(code, /datetime\.now\(tz=timezone\.utc\)/);
   assert.doesNotMatch(code, /datetime\.now\(\)/);
+  // No orchestrator/SharedAgentState coupling.
+  assert.doesNotMatch(code, /SharedAgentState/);
 });
 
-test("renderMakefile emits orchestrator + per-worker targets with tab recipes", () => {
-  const mk = renderMakefile(["alice", "bob"]);
-  assert.match(mk, /orchestrator:\n\tpython -m agents\.orchestrator\.orchestrator_agent/);
-  assert.match(mk, /alice:\n\tpython -m agents\.alice\.alice_agent/);
-  assert.match(mk, /bob:\n\tpython -m agents\.bob\.bob_agent/);
+test("renderMicroAgent reads a per-agent seed env var", () => {
+  const code = renderMicroAgent("bob", 8002);
+  assert.match(code, /seed=os\.getenv\("BOB_SEED_PHRASE"\)/);
+  assert.match(code, /port=8002/);
+  assert.match(code, /def bob_workflow\(query: str\)/);
 });
 
-test("renderEnv writes one unique seed per agent", () => {
-  const env = renderEnv(["alice", "bob"], makeSeedFn());
-  assert.match(env, /ORCHESTRATOR_SEED_PHRASE=seed-0/);
-  assert.match(env, /ALICE_SEED_PHRASE=seed-1/);
-  assert.match(env, /BOB_SEED_PHRASE=seed-2/);
+test("renderSingleAgent uses the single AGENT_SEED_PHRASE", () => {
+  const code = renderSingleAgent("solo", SINGLE_AGENT_PORT);
+  assert.match(code, /seed=os\.getenv\("AGENT_SEED_PHRASE"\)/);
+  assert.match(code, /port=8000/);
+});
+
+test("renderMultiAgentMakefile uses manager-correct interpreter, one target per agent", () => {
+  const uv = renderMultiAgentMakefile(["alice", "bob"], "uv");
+  assert.match(uv, /alice:\n\tuv run python -m agents\.alice\.alice_agent/);
+  assert.match(uv, /bob:\n\tuv run python -m agents\.bob\.bob_agent/);
+  // No orchestrator target.
+  assert.doesNotMatch(uv, /orchestrator:/);
+
+  const pip = renderMultiAgentMakefile(["alice"], "pip");
+  assert.match(pip, /alice:\n\t\.venv\/bin\/python -m agents\.alice\.alice_agent/);
+  assert.doesNotMatch(pip, /\n\tpython -m/);
+});
+
+test("renderMultiAgentEnv writes one unique seed per agent (no orchestrator)", () => {
+  const env = renderMultiAgentEnv(["alice", "bob"], makeSeedFn());
+  assert.match(env, /ALICE_SEED_PHRASE=seed-0/);
+  assert.match(env, /BOB_SEED_PHRASE=seed-1/);
+  assert.doesNotMatch(env, /ORCHESTRATOR_SEED_PHRASE/);
 });

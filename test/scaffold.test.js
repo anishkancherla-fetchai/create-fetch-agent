@@ -13,11 +13,11 @@ function exists(dir, rel) {
   return fs.existsSync(path.join(dir, rel));
 }
 
-test("scaffold orchestrator+workers writes the full tree", async () => {
+test("scaffold multi-agent writes independent agents (no orchestrator)", async () => {
   const cwd = tmpDir();
   const answers = {
     projectName: "my-app",
-    buildType: "orchestrator_workers",
+    buildType: "multi_agent",
     workers: ["alice", "bob"],
     pythonManager: "uv",
     aiTargets: [],
@@ -26,25 +26,9 @@ test("scaffold orchestrator+workers writes the full tree", async () => {
   };
   const { targetDir, written } = await scaffold(answers, { cwd, seedFn: makeSeedFn() });
 
-  // Static files copied.
+  // Independent agent packages.
   for (const f of [
     "agents/__init__.py",
-    "agents/models/__init__.py",
-    "agents/models/models.py",
-    "agents/services/__init__.py",
-    "agents/services/state_service.py",
-    "agents/orchestrator/__init__.py",
-    "requirements.txt",
-    ".gitignore",
-  ]) {
-    assert.ok(exists(targetDir, f), `missing static file ${f}`);
-  }
-
-  // Generated files.
-  for (const f of [
-    "agents/models/config.py",
-    "agents/orchestrator/orchestrator_agent.py",
-    "agents/orchestrator/chat_protocol.py",
     "agents/alice/__init__.py",
     "agents/alice/alice_agent.py",
     "agents/bob/__init__.py",
@@ -53,42 +37,56 @@ test("scaffold orchestrator+workers writes the full tree", async () => {
     ".env.example",
     "Makefile",
     "README.md",
+    ".gitignore",
   ]) {
-    assert.ok(exists(targetDir, f), `missing generated file ${f}`);
+    assert.ok(exists(targetDir, f), `missing file ${f}`);
   }
 
-  // No poetry file for uv.
-  assert.ok(!exists(targetDir, "pyproject.toml"));
+  // No orchestrator / shared-state plumbing.
+  assert.ok(!exists(targetDir, "agents/orchestrator/orchestrator_agent.py"));
+  assert.ok(!exists(targetDir, "agents/orchestrator/chat_protocol.py"));
+  assert.ok(!exists(targetDir, "agents/models/models.py"));
+  assert.ok(!exists(targetDir, "agents/services/state_service.py"));
 
-  // .env seeds match config agents.
+  // uv build is a real uv project: PEP 621 pyproject + pinned Python, no requirements.txt.
+  assert.ok(exists(targetDir, "pyproject.toml"));
+  assert.ok(exists(targetDir, ".python-version"));
+  assert.ok(!exists(targetDir, "requirements.txt"));
+  const pyproject = read(targetDir, "pyproject.toml");
+  assert.match(pyproject, /\[project\]/);
+  assert.match(pyproject, /package = false/);
+  assert.match(read(targetDir, ".python-version"), /3\.12/);
+
+  // One unique seed per agent, no orchestrator seed.
   const env = read(targetDir, ".env");
-  assert.match(env, /ORCHESTRATOR_SEED_PHRASE=seed-0/);
-  assert.match(env, /ALICE_SEED_PHRASE=seed-1/);
-  assert.match(env, /BOB_SEED_PHRASE=seed-2/);
+  assert.match(env, /ALICE_SEED_PHRASE=seed-0/);
+  assert.match(env, /BOB_SEED_PHRASE=seed-1/);
+  assert.doesNotMatch(env, /ORCHESTRATOR_SEED_PHRASE/);
 
-  // Routing branches present.
-  const chat = read(targetDir, "agents/orchestrator/chat_protocol.py");
-  assert.match(chat, /if "alice" in text_lower:/);
-  assert.match(chat, /if "bob" in text_lower:/);
+  // Each agent is a standalone chat agent reading its own seed.
+  const alice = read(targetDir, "agents/alice/alice_agent.py");
+  assert.match(alice, /seed=os\.getenv\("ALICE_SEED_PHRASE"\)/);
+  assert.match(alice, /chat_protocol_spec/);
+  assert.doesNotMatch(alice, /SharedAgentState/);
 
-  // Makefile targets.
+  // Makefile has one target per agent, no orchestrator.
   const mk = read(targetDir, "Makefile");
-  assert.match(mk, /orchestrator:/);
   assert.match(mk, /alice:/);
   assert.match(mk, /bob:/);
+  assert.doesNotMatch(mk, /orchestrator:/);
 
-  // Ports deterministic in worker files.
+  // Ports sequential from 8001.
   assert.match(read(targetDir, "agents/alice/alice_agent.py"), /port=8001/);
   assert.match(read(targetDir, "agents/bob/bob_agent.py"), /port=8002/);
 
-  assert.ok(written.length > 10);
+  assert.ok(written.length > 8);
 });
 
-test("scaffold respects custom worker count, names and port skipping", async () => {
+test("scaffold respects custom agent count, names and sequential ports", async () => {
   const cwd = tmpDir();
   const answers = {
     projectName: "three",
-    buildType: "orchestrator_workers",
+    buildType: "multi_agent",
     workers: ["red", "green", "blue"],
     pythonManager: "pip",
     aiTargets: [],
@@ -99,13 +97,9 @@ test("scaffold respects custom worker count, names and port skipping", async () 
 
   assert.match(read(targetDir, "agents/red/red_agent.py"), /port=8001/);
   assert.match(read(targetDir, "agents/green/green_agent.py"), /port=8002/);
-  // 8003 reserved for orchestrator -> blue gets 8004.
-  assert.match(read(targetDir, "agents/blue/blue_agent.py"), /port=8004/);
-
-  const config = read(targetDir, "agents/models/config.py");
-  for (const n of ["RED", "GREEN", "BLUE"]) {
-    assert.match(config, new RegExp(`${n}_ADDRESS = Identity.from_seed`));
-  }
+  assert.match(read(targetDir, "agents/blue/blue_agent.py"), /port=8003/);
+  // pip build gets requirements.txt.
+  assert.ok(exists(targetDir, "requirements.txt"));
 });
 
 test("scaffold poetry build emits pyproject.toml", async () => {
@@ -113,7 +107,7 @@ test("scaffold poetry build emits pyproject.toml", async () => {
   const { targetDir } = await scaffold(
     {
       projectName: "poetry-proj",
-      buildType: "orchestrator_workers",
+      buildType: "multi_agent",
       workers: ["alice"],
       pythonManager: "poetry",
       aiTargets: [],
@@ -145,15 +139,110 @@ test("scaffold single agent writes a flat chat-ready project", async () => {
   );
 
   assert.ok(exists(targetDir, "agent.py"));
-  assert.ok(exists(targetDir, "requirements.txt"));
+  // uv single agent => pyproject.toml (not requirements.txt).
+  assert.ok(exists(targetDir, "pyproject.toml"));
+  assert.ok(!exists(targetDir, "requirements.txt"));
   assert.ok(exists(targetDir, "Makefile"));
   assert.ok(exists(targetDir, ".env"));
 
   const agent = read(targetDir, "agent.py");
-  assert.match(agent, /def agent_workflow\(query: str\)/);
+  assert.match(agent, /def solo_bot_workflow\(query: str\)/);
   assert.match(agent, /chat_protocol_spec/);
+  // Session id is surfaced to the handler.
+  assert.match(agent, /session_id = str\(ctx\.session\)/);
   assert.match(read(targetDir, ".env"), /AGENT_SEED_PHRASE=seed-0/);
-  assert.match(read(targetDir, "Makefile"), /run:\n\tpython agent\.py/);
+  assert.match(read(targetDir, "Makefile"), /run:\n\tuv run python agent\.py/);
+});
+
+test("scaffold payment agent writes the Stripe + FET file tree", async () => {
+  const cwd = tmpDir();
+  const { targetDir } = await scaffold(
+    {
+      projectName: "pay-bot",
+      buildType: "payment_agent",
+      workers: [],
+      pythonManager: "uv",
+      aiTargets: [],
+      registerNow: false,
+      installNow: false,
+    },
+    { cwd, seedFn: makeSeedFn() },
+  );
+
+  // Single-concern file layout (verbatim code + generated env/manifest).
+  for (const f of [
+    "agent.py",
+    "protocols/__init__.py",
+    "protocols/chat_proto.py",
+    "protocols/payment_proto.py",
+    "stripe_payments/__init__.py",
+    "stripe_payments/checkout.py",
+    "fet_payments/__init__.py",
+    "fet_payments/ledger.py",
+    ".env",
+    ".env.example",
+    "Makefile",
+    "README.md",
+    ".gitignore",
+  ]) {
+    assert.ok(exists(targetDir, f), `missing file ${f}`);
+  }
+
+  // Both protocols are wired and dispatch by payment_method.
+  const agent = read(targetDir, "agent.py");
+  assert.match(agent, /agent\.include\(chat_proto/);
+  assert.match(agent, /agent\.include\(payment_proto/);
+  assert.match(agent, /seed=AGENT_SEED/);
+
+  const pay = read(targetDir, "protocols/payment_proto.py");
+  assert.match(pay, /payment_protocol_spec, role="seller"/);
+  assert.match(pay, /payment_method == "stripe"/);
+  assert.match(pay, /payment_method == "fet_direct"/);
+
+  // The Stripe SDK and cosmpy stay isolated to their own modules.
+  assert.match(read(targetDir, "stripe_payments/checkout.py"), /import stripe/);
+  assert.match(read(targetDir, "fet_payments/ledger.py"), /from cosmpy\.aerial\.client/);
+
+  // Pre-generated seed + Stripe test placeholders in .env.
+  const env = read(targetDir, ".env");
+  assert.match(env, /AGENT_SEED_PHRASE=seed-0/);
+  assert.match(env, /STRIPE_SECRET_KEY=sk_test_/);
+  assert.match(env, /ENABLE_FET_PAYMENTS=true/);
+  // .env.example has no generated seed.
+  assert.match(read(targetDir, ".env.example"), /AGENT_SEED_PHRASE=\n/);
+
+  // uv manifest pins the payment-capable uagents + adds stripe/cosmpy/openai.
+  const pyproject = read(targetDir, "pyproject.toml");
+  assert.match(pyproject, /uagents==0\.23\.6/);
+  assert.match(pyproject, /uagents-core==0\.4\.0/);
+  assert.match(pyproject, /"stripe"/);
+  assert.match(pyproject, /"cosmpy==0\.11\.1"/);
+  assert.match(pyproject, /"openai"/);
+
+  assert.match(read(targetDir, "Makefile"), /run:\n\tuv run python agent\.py/);
+});
+
+test("scaffold payment agent (pip) appends extra deps to requirements.txt", async () => {
+  const cwd = tmpDir();
+  const { targetDir } = await scaffold(
+    {
+      projectName: "pay-pip",
+      buildType: "payment_agent",
+      workers: [],
+      pythonManager: "pip",
+      aiTargets: [],
+      registerNow: false,
+      installNow: false,
+    },
+    { cwd, seedFn: makeSeedFn() },
+  );
+  assert.ok(exists(targetDir, "requirements.txt"));
+  assert.ok(!exists(targetDir, "pyproject.toml"));
+  const reqs = read(targetDir, "requirements.txt");
+  assert.match(reqs, /uagents==0\.23\.6/);
+  assert.match(reqs, /stripe/);
+  assert.match(reqs, /cosmpy==0\.11\.1/);
+  assert.match(reqs, /openai/);
 });
 
 test("toAgentName sanitizes project names", () => {

@@ -6,7 +6,6 @@ import os from "node:os";
 import { execFileSync, spawn } from "node:child_process";
 
 import { scaffold } from "../src/scaffold.js";
-import { ORCHESTRATOR_PORT } from "../src/workers.js";
 import { makeSeedFn } from "./helpers.js";
 
 // Gated: needs Python + dependency install + a live agent process. Enable with
@@ -14,14 +13,14 @@ import { makeSeedFn } from "./helpers.js";
 const ENABLED = process.env.CFA_SMOKE === "1";
 
 test(
-  "orchestrator boots and /health returns ok healthy",
+  "a generated agent boots and logs its address",
   { skip: !ENABLED, timeout: 180_000 },
   async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "cfa-smoke-"));
     const { targetDir } = await scaffold(
       {
         projectName: "smoke-app",
-        buildType: "orchestrator_workers",
+        buildType: "multi_agent",
         workers: ["alice"],
         pythonManager: "pip",
         aiTargets: [],
@@ -37,30 +36,35 @@ test(
       stdio: "ignore",
     });
 
-    const proc = spawn(".venv/bin/python", ["-m", "agents.orchestrator.orchestrator_agent"], {
+    const proc = spawn(".venv/bin/python", ["-m", "agents.alice.alice_agent"], {
       cwd: targetDir,
     });
 
     try {
-      const body = await pollHealth(`http://localhost:${ORCHESTRATOR_PORT}/health`, 60_000);
-      assert.match(body, /ok healthy/);
+      const log = await waitForLog(proc, /alice started with address/, 60_000);
+      assert.match(log, /alice started with address/);
     } finally {
       proc.kill("SIGTERM");
     }
   },
 );
 
-async function pollHealth(url, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return await res.text();
-    } catch (err) {
-      lastErr = err;
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  throw new Error(`health never came up: ${lastErr && lastErr.message}`);
+function waitForLog(proc, pattern, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let buf = "";
+    const timer = setTimeout(() => reject(new Error(`log never matched: ${buf.slice(-500)}`)), timeoutMs);
+    const onData = (chunk) => {
+      buf += chunk.toString();
+      if (pattern.test(buf)) {
+        clearTimeout(timer);
+        resolve(buf);
+      }
+    };
+    proc.stdout.on("data", onData);
+    proc.stderr.on("data", onData);
+    proc.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }

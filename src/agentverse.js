@@ -9,7 +9,7 @@ import chalk from "chalk";
  * startup; we print the steps and the URL pattern here.
  */
 export function printAgentverseGuidance(answers, { logger = console } = {}) {
-  const isOrchestrator = answers.buildType === "orchestrator_workers";
+  const isMulti = answers.buildType === "multi_agent";
   const now = answers.registerNow;
 
   logger.log("");
@@ -26,16 +26,40 @@ export function printAgentverseGuidance(answers, { logger = console } = {}) {
   const steps = [
     "Sign in at https://agentverse.ai (and https://asi1.ai to chat via ASI:One).",
     "Start your agent(s) — each logs its Agentverse inspector URL on startup.",
-    isOrchestrator
+    isMulti
       ? "Open EACH agent's inspector URL in the browser (one per agent)."
       : "Open the inspector URL in the browser.",
     'Click "Connect", then choose "Mailbox".',
-    isOrchestrator
-      ? 'On the ORCHESTRATOR inspector, click "Go to Agent Profile" → "Chat with Agent".'
+    isMulti
+      ? "On each agent's profile, add a clear description + keywords — ASI:One uses these to route to it."
       : 'Click "Go to Agent Profile" → "Chat with Agent".',
   ];
 
   steps.forEach((s, i) => logger.log(`  ${chalk.cyan(`${i + 1}.`)} ${s}`));
+
+  logger.log("");
+  logger.log(chalk.bold("  ✅ Chat protocol: already wired for you."));
+  logger.log(
+    chalk.dim(
+      "  Chat only works if the agent publishes the chat protocol manifest — this is the",
+    ),
+  );
+  logger.log(
+    chalk.dim(
+      "  #1 thing builders forget. Your generated agent(s) already do it: look for",
+    ),
+  );
+  logger.log(
+    chalk.dim(
+      '  `publish_manifest=True` in the code and "Manifest published successfully:',
+    ),
+  );
+  logger.log(
+    chalk.dim(
+      '  AgentChatProtocol" in the startup logs. (So Agentverse\'s "Add Chat Protocol"',
+    ),
+  );
+  logger.log(chalk.dim("  checklist item is done — connecting the mailbox alone is NOT enough.)"));
 
   logger.log("");
   logger.log(chalk.dim("  Inspector URL pattern (the agent logs the exact one):"));
@@ -45,11 +69,16 @@ export function printAgentverseGuidance(answers, { logger = console } = {}) {
     ),
   );
 
-  if (isOrchestrator) {
+  if (isMulti) {
     logger.log("");
     logger.log(
       chalk.dim(
-        "  Tip: only the orchestrator needs ASI:One chat — it routes to the workers.",
+        "  Tip: there's no orchestrator — ASI:One discovers your agents and routes to whichever",
+      ),
+    );
+    logger.log(
+      chalk.dim(
+        "  best matches each request, based on the description on its Agentverse profile.",
       ),
     );
   }
