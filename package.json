@@ -1,7 +1,7 @@
 {
   "name": "create-fetch-agent",
-  "version": "0.1.2",
-  "description": "Scaffold runnable Fetch.ai uAgent projects with one command, then layer in AI-coding-tool context.",
+  "version": "0.2.0",
+  "description": "Scaffold runnable Fetch.ai uAgent projects — single, multi-agent (ASI:One-routed), or pay-to-use (Stripe + FET) — with the chat protocol wired in and AI-coding-tool context, in one command.",
   "type": "module",
   "bin": {
     "create-fetch-agent": "bin/cli.js"
@@ -29,6 +29,9 @@
     "ai-agents",
     "asi",
     "asi-one",
+    "chat-protocol",
+    "payment",
+    "stripe",
     "scaffold",
     "create",
     "generator",
