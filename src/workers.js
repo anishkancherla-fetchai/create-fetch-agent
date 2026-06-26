@@ -213,9 +213,9 @@ export function renderSingleEnv(seedFn = seed) {
 
 /**
  * Render the body of a payment agent's env file (shared by `.env` and
- * `.env.example`). Lists every variable the generated code reads — Stripe
- * is the primary rail (test keys), FET is the on-chain alternative, and the
- * LLM key is optional (the paid action degrades to a placeholder without it).
+ * `.env.example`). Lists every variable the generated code reads — FET is the
+ * payment rail (no keys needed, testnet by default) and the LLM key is optional
+ * (the paid action degrades to a placeholder without it).
  *
  * @param {string} seedValue value for AGENT_SEED_PHRASE (generated, or "" for the example)
  */
@@ -228,31 +228,22 @@ AGENT_PORT=${SINGLE_AGENT_PORT}
 # Switch to "mainnet" only for a real production deploy.
 AGENT_NETWORK=testnet
 
-# --- Stripe (card) — paste your Stripe TEST keys here ---
-# Get them at https://dashboard.stripe.com/test/apikeys
-ENABLE_STRIPE_PAYMENTS=true
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
-# Optional: pin a pre-created Stripe Price; otherwise an inline price is used.
-STRIPE_PRICE_ID=
-# Amount charged, in cents. 100 = $1.00, 5000 = $50.00
-STRIPE_AMOUNT_CENTS=100
-STRIPE_CURRENCY=usd
-STRIPE_PRODUCT_NAME=Agent service
-STRIPE_SUCCESS_URL=https://agentverse.ai/payment-success
-
-# --- FET on-chain payments (alternative rail; no extra keys needed) ---
-ENABLE_FET_PAYMENTS=true
+# --- FET on-chain payment (no keys needed) ---
+# Amount the buyer pays per request, in FET.
 FET_AMOUNT_FET=0.001
 # "true" -> stable-testnet (atestfet); "false" -> mainnet (afet)
 FET_USE_TESTNET=true
+# How long to wait on a ledger query before giving up (seconds).
+FET_LEDGER_QUERY_TIMEOUT_SECONDS=20
 
-# --- Shared payment UX knobs ---
+# --- Payment UX knobs ---
+# How long the buyer has to complete the payment, in seconds.
 CHECKOUT_DEADLINE_SECONDS=300
 
 # --- Optional: power the paid action with ASI:One (OpenAI-compatible LLM) ---
-# Leave blank to use the built-in placeholder paid action. Set it to route the
-# user's prompt to ASI:One after payment. Get a key at https://asi1.ai
+# Leave blank to use the built-in placeholder paid action. Set it (and run
+# \`pip install openai\`) to route the user's prompt to ASI:One after payment.
+# Get a key at https://asi1.ai
 ASI_ONE_API_KEY=
 ASI_ONE_MODEL=asi1
 `;

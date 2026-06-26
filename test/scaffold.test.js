@@ -154,7 +154,7 @@ test("scaffold single agent writes a flat chat-ready project", async () => {
   assert.match(read(targetDir, "Makefile"), /run:\n\tuv run python agent\.py/);
 });
 
-test("scaffold payment agent writes the Stripe + FET file tree", async () => {
+test("scaffold payment agent writes the FET-only file tree", async () => {
   const cwd = tmpDir();
   const { targetDir } = await scaffold(
     {
@@ -169,16 +169,12 @@ test("scaffold payment agent writes the Stripe + FET file tree", async () => {
     { cwd, seedFn: makeSeedFn() },
   );
 
-  // Single-concern file layout (verbatim code + generated env/manifest).
+  // One file per protocol + entry point (verbatim code + generated env/manifest).
   for (const f of [
     "agent.py",
     "protocols/__init__.py",
     "protocols/chat_proto.py",
     "protocols/payment_proto.py",
-    "stripe_payments/__init__.py",
-    "stripe_payments/checkout.py",
-    "fet_payments/__init__.py",
-    "fet_payments/ledger.py",
     ".env",
     ".env.example",
     "Makefile",
@@ -188,36 +184,38 @@ test("scaffold payment agent writes the Stripe + FET file tree", async () => {
     assert.ok(exists(targetDir, f), `missing file ${f}`);
   }
 
-  // Both protocols are wired and dispatch by payment_method.
+  // No separate Stripe/FET sub-packages — the FET rail lives in payment_proto.py.
+  assert.ok(!exists(targetDir, "stripe_payments/checkout.py"), "stripe_payments should be gone");
+  assert.ok(!exists(targetDir, "fet_payments/ledger.py"), "fet_payments should be gone");
+
+  // Both protocols are wired.
   const agent = read(targetDir, "agent.py");
   assert.match(agent, /agent\.include\(chat_proto/);
   assert.match(agent, /agent\.include\(payment_proto/);
   assert.match(agent, /seed=AGENT_SEED/);
 
+  // FET-only seller protocol with on-chain verification inlined (no Stripe).
   const pay = read(targetDir, "protocols/payment_proto.py");
   assert.match(pay, /payment_protocol_spec, role="seller"/);
-  assert.match(pay, /payment_method == "stripe"/);
-  assert.match(pay, /payment_method == "fet_direct"/);
+  assert.match(pay, /"fet_direct"/);
+  assert.match(pay, /from cosmpy\.aerial\.client/);
+  assert.doesNotMatch(pay, /stripe/i);
 
-  // The Stripe SDK and cosmpy stay isolated to their own modules.
-  assert.match(read(targetDir, "stripe_payments/checkout.py"), /import stripe/);
-  assert.match(read(targetDir, "fet_payments/ledger.py"), /from cosmpy\.aerial\.client/);
-
-  // Pre-generated seed + Stripe test placeholders in .env.
+  // Pre-generated seed + FET config in .env, no Stripe keys.
   const env = read(targetDir, ".env");
   assert.match(env, /AGENT_SEED_PHRASE=seed-0/);
-  assert.match(env, /STRIPE_SECRET_KEY=sk_test_/);
-  assert.match(env, /ENABLE_FET_PAYMENTS=true/);
+  assert.match(env, /FET_USE_TESTNET=true/);
+  assert.doesNotMatch(env, /STRIPE/);
   // .env.example has no generated seed.
   assert.match(read(targetDir, ".env.example"), /AGENT_SEED_PHRASE=\n/);
 
-  // uv manifest pins the payment-capable uagents + adds stripe/cosmpy/openai.
+  // uv manifest pins the payment-capable uagents + adds cosmpy only.
   const pyproject = read(targetDir, "pyproject.toml");
   assert.match(pyproject, /uagents==0\.23\.6/);
   assert.match(pyproject, /uagents-core==0\.4\.0/);
-  assert.match(pyproject, /"stripe"/);
   assert.match(pyproject, /"cosmpy==0\.11\.1"/);
-  assert.match(pyproject, /"openai"/);
+  assert.doesNotMatch(pyproject, /"stripe"/);
+  assert.doesNotMatch(pyproject, /"openai"/);
 
   assert.match(read(targetDir, "Makefile"), /run:\n\tuv run python agent\.py/);
 });
@@ -240,9 +238,9 @@ test("scaffold payment agent (pip) appends extra deps to requirements.txt", asyn
   assert.ok(!exists(targetDir, "pyproject.toml"));
   const reqs = read(targetDir, "requirements.txt");
   assert.match(reqs, /uagents==0\.23\.6/);
-  assert.match(reqs, /stripe/);
   assert.match(reqs, /cosmpy==0\.11\.1/);
-  assert.match(reqs, /openai/);
+  assert.doesNotMatch(reqs, /stripe/);
+  assert.doesNotMatch(reqs, /openai/);
 });
 
 test("toAgentName sanitizes project names", () => {

@@ -60,7 +60,7 @@ async def startup(ctx: Context):
     ctx.logger.info(f"payment agent started with address: {agent.address}")
     ctx.logger.info(f"wallet (payment recipient): {agent.wallet.address()}")
     ctx.logger.info("Chat + payment protocols published — ASI:One ready (chattable + payable).")
-    ctx.logger.info("Accepts: Stripe card + on-chain FET. Chat to trigger a payment request.")
+    ctx.logger.info("Accepts: on-chain FET. Chat to trigger a payment request.")
 
 
 if __name__ == "__main__":

@@ -42,10 +42,10 @@ function printNextSteps(logger, { answers, targetDir, skillPaths }) {
       logger.log(`  ${chalk.cyan(`make ${n}`)}`);
     }
   } else if (answers.buildType === "payment_agent") {
-    logger.log(chalk.dim("  Paste your Stripe TEST keys into .env, then start the agent:"));
-    logger.log(`  ${chalk.cyan("STRIPE_SECRET_KEY / STRIPE_PUBLISHABLE_KEY in .env")}`);
+    logger.log(chalk.dim("  No payment keys to configure — FET defaults to testnet. Just run:"));
     logger.log(`  ${chalk.cyan("make run")}`);
-    logger.log(chalk.dim("  Then chat with it and pay with Stripe test card 4242 4242 4242 4242."));
+    logger.log(chalk.dim("  Then chat with it and pay the FET request from a testnet wallet."));
+    logger.log(chalk.dim("  Add your paid logic in run_paid_action() in protocols/chat_proto.py."));
   } else {
     logger.log(`  ${chalk.cyan("make run")}`);
   }

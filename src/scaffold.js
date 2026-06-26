@@ -34,17 +34,13 @@ const REQUIREMENTS_SRC = path.join(TEMPLATES_DIR, "single-agent", "requirements.
 /** The payment agent needs newer uagents pins (payment protocol) + extra SDKs. */
 const PAYMENT_DIR = path.join(TEMPLATES_DIR, "payment-agent");
 const PAYMENT_REQUIREMENTS_SRC = path.join(PAYMENT_DIR, "requirements.txt");
-const PAYMENT_EXTRA_DEPS = ["cosmpy==0.11.1", "stripe", "openai"];
+const PAYMENT_EXTRA_DEPS = ["cosmpy==0.11.1"];
 /** Code files vended verbatim for the payment agent (relative to PAYMENT_DIR). */
 const PAYMENT_CODE_FILES = [
   "agent.py",
   "protocols/__init__.py",
   "protocols/chat_proto.py",
   "protocols/payment_proto.py",
-  "stripe_payments/__init__.py",
-  "stripe_payments/checkout.py",
-  "fet_payments/__init__.py",
-  "fet_payments/ledger.py",
 ];
 
 /**
@@ -171,10 +167,10 @@ async function scaffoldSingleAgent(answers, ctx) {
 
 /**
  * A pay-to-use agent: speaks the Agent Chat Protocol AND the Agent Payment
- * Protocol, advertising BOTH Stripe (card) and on-chain FET in one
- * RequestPayment. The full request -> commit -> verify -> complete flow is
- * generated; the builder only pastes Stripe test keys and fills in the paid
- * action. Code is vended verbatim from a single-concern file layout.
+ * Protocol, charging in on-chain FET. The full request -> commit -> verify ->
+ * complete flow is generated (no payment keys to configure); the builder only
+ * fills in the paid action. Code is vended verbatim from a single-concern file
+ * layout (one file per protocol + entry point).
  */
 async function scaffoldPaymentAgent(answers, ctx) {
   const { targetDir, seedFn, written } = ctx;
@@ -311,37 +307,33 @@ function renderPaymentReadme(answers) {
   return `# ${answers.projectName}
 
 A Fetch.ai **pay-to-use agent**: it speaks the Agent Chat Protocol *and* the
-Agent Payment Protocol, so a user must pay before the agent runs its paid
-action. It advertises **both Stripe (card) and on-chain FET** in a single
-payment request — the user picks one. Generated with
+Agent Payment Protocol, so a user must pay in **on-chain FET** before the agent
+runs its paid action. Generated with
 [create-fetch-agent](https://github.com/anishkancherla-fetchai/create-fetch-agent).
+
+> This template ships **FET payments only** — it's the complete, working rail.
+> Other rails (Stripe cards, USDC, etc.) are intentionally left for you to add
+> in \`protocols/payment_proto.py\`.
 
 ## How a payment works
 
 \`\`\`
-user chats  ──►  agent sends RequestPayment (Stripe card + FET)
+user chats  ──►  agent sends RequestPayment (FET)
                       │
                       ▼
-        Agentverse UI shows embedded Stripe checkout (Approve / Reject)
+        Agentverse UI shows a pay-with-FET prompt (Approve / Reject)
                       │
-       user pays with test card 4242 4242 4242 4242
+            user pays from their FET wallet
                       │
                       ▼
-   agent verifies payment is "paid"  ──►  CompletePayment  ──►  run_paid_action()
+  agent verifies the transfer on-chain  ──►  CompletePayment  ──►  run_paid_action()
 \`\`\`
 
 ## Setup
 
-The agent's seed is already generated in \`.env\`. To accept card payments, paste
-your **Stripe TEST keys** into \`.env\` (everything else has sensible defaults):
-
-\`\`\`dotenv
-STRIPE_SECRET_KEY=sk_test_...        # dashboard.stripe.com/test/apikeys
-STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_AMOUNT_CENTS=100              # 100 = $1.00, 5000 = $50.00
-\`\`\`
-
-Then install dependencies:
+The agent's seed is already generated in \`.env\` and there are **no payment keys
+to configure** — FET defaults to the stable-testnet and the wallet auto-funds
+itself on startup. Just install dependencies:
 
 \`\`\`bash
 ${installBlock}
@@ -355,17 +347,18 @@ make run
 
 The agent starts on port ${SINGLE_AGENT_PORT} and logs its address + an
 Agentverse inspector URL. Connect it through the inspector, then chat with it —
-it will reply with a payment request. Pay with Stripe test card
-\`4242 4242 4242 4242\` (any future expiry, any CVC) to complete the flow.
+it will reply with a FET payment request. Pay from a testnet wallet to complete
+the flow. (Need testnet FET? Use the
+[Fetch.ai testnet faucet](https://companion.fetch.ai/dorado-1/accounts).)
 
 ## Where to add your logic
 
 The whole payment flow is done. The **one** function you own is
 \`run_paid_action(...)\` in \`protocols/chat_proto.py\` — it runs automatically once
 a payment is verified. By default it replies with a placeholder (so the flow
-works with only Stripe keys); set \`ASI_ONE_API_KEY\` in \`.env\` to route the
-prompt to ASI:One instead, or replace the body with your real paid service
-(image gen, API call, data lookup, etc.).
+works with no extra keys); set \`ASI_ONE_API_KEY\` in \`.env\` to route the prompt
+to ASI:One instead (\`pip install openai\`), or replace the body with your real
+paid service (image gen, API call, data lookup, etc.).
 
 ## File layout
 
@@ -373,22 +366,13 @@ prompt to ASI:One instead, or replace the body with your real paid service
 | ---- | ------- |
 | \`agent.py\` | entrypoint: load env, create agent, include both protocols |
 | \`protocols/chat_proto.py\` | chat handling + \`run_paid_action\` (your logic) |
-| \`protocols/payment_proto.py\` | payment dispatch (Stripe + FET), verification |
-| \`stripe_payments/checkout.py\` | the only file that touches the Stripe SDK |
-| \`fet_payments/ledger.py\` | the only file that touches the FET ledger (cosmpy) |
-
-## Card vs. crypto, or both
-
-Both rails are on by default. Toggle in \`.env\`:
-
-- \`ENABLE_STRIPE_PAYMENTS=false\` → FET-only
-- \`ENABLE_FET_PAYMENTS=false\` → Stripe-only
+| \`protocols/payment_proto.py\` | the FET payment rail: request, on-chain verify, complete |
 
 ## Going live
 
-Defaults are **test mode**: Stripe test keys + FET stable-testnet. Before a real
-deploy, switch to live Stripe keys, set \`FET_USE_TESTNET=false\`, and set
-\`AGENT_NETWORK=mainnet\` (then fund the agent wallet yourself).
+Defaults are **test mode**: FET stable-testnet, wallet auto-funded. Before a real
+deploy, set \`FET_USE_TESTNET=false\` and \`AGENT_NETWORK=mainnet\` (then fund the
+agent wallet yourself).
 `;
 }
 

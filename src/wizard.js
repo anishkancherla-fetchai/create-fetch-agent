@@ -68,7 +68,7 @@ export async function runWizard({
       { name: "Single agent", value: "single_agent" },
       { name: "Chat agent (ASI:One ready)", value: "chat_agent" },
       { name: "Multiple agents (ASI:One routes between them)", value: "multi_agent" },
-      { name: "Payment agent (FET + Stripe)", value: "payment_agent" },
+      { name: "Payment agent (FET)", value: "payment_agent" },
     ],
   });
 

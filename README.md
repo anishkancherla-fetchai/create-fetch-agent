@@ -21,7 +21,7 @@ left as `TODO` are the workflow functions where *your* logic goes.
 An interactive wizard asks a few questions and then:
 
 1. **Generates a runnable uAgents project** — a single agent, several independent
-   ASI:One-routed agents, or a pay-to-use agent (Stripe + FET).
+   ASI:One-routed agents, or a pay-to-use agent (on-chain FET).
 2. **Pre-generates unique seeds** for every agent and wires up addresses + ports.
 3. **Wires the chat protocol into every agent** so it's chattable + discoverable
    on ASI:One out of the box (the #1 thing builders forget).
@@ -39,7 +39,7 @@ An interactive wizard asks a few questions and then:
 | Prompt | Choices |
 | --- | --- |
 | **Project name** | directory created under the current folder (or pass it as an argument) |
-| **What are you building?** | `Single agent` · `Chat agent (ASI:One ready)` · `Multiple agents (ASI:One routes between them)` · `Payment agent (FET + Stripe)` |
+| **What are you building?** | `Single agent` · `Chat agent (ASI:One ready)` · `Multiple agents (ASI:One routes between them)` · `Payment agent (FET)` |
 | **Agent count & names** | only for the multi-agent build (defaults `alice`, `bob`) |
 | **Python setup** | `uv` (default) · `poetry` · `pip + venv` |
 | **AI-editor context** | any of `Cursor` · `Claude Code` · `Antigravity` · `AGENTS.md` (or none) |
@@ -91,29 +91,31 @@ my-app/
 Ports are deterministic and sequential from `8001`. Fill in each agent's
 `AGENT_DESCRIPTION` so ASI:One knows when to route to it.
 
-### Payment agent (`Payment agent (FET + Stripe)`)
+### Payment agent (`Payment agent (FET)`)
 
 A pay-to-use agent: it speaks the chat protocol **and** the payment protocol,
-advertising both **Stripe (card)** and **on-chain FET** in a single payment
-request. The full `request → commit → verify → complete` flow is generated.
+charging in **on-chain FET**. The full `request → commit → verify → complete`
+flow is generated, with on-chain verification built in.
 
 ```
 my-app/
   agent.py                       # includes both chat + payment protocols
   protocols/
     chat_proto.py                # chat handling + run_paid_action() — your hook
-    payment_proto.py             # Stripe + FET dispatch, verification, idempotency
-  stripe_payments/checkout.py    # the only file that touches the Stripe SDK
-  fet_payments/ledger.py         # the only file that touches the FET ledger (cosmpy)
-  .env                           # seed (pre-generated) + Stripe test placeholders
+    payment_proto.py             # the FET rail: request, on-chain verify, complete
+  .env                           # seed (pre-generated) — no payment keys needed
   Makefile                       # make run
   README.md
 ```
 
-Paste your Stripe **test** keys into `.env`, `make run`, then pay with Stripe
-test card `4242 4242 4242 4242`. The default paid action runs with **only Stripe
-keys** (it replies with a placeholder); set `ASI_ONE_API_KEY` to power it with
-ASI:One, or edit `run_paid_action()` to call your own service.
+This template ships **FET only** — it's the complete, working rail. Other rails
+(Stripe cards, USDC, etc.) are intentionally left for you to add in
+`payment_proto.py`. There are **no payment keys to configure**: FET defaults to
+the stable-testnet and the wallet auto-funds itself. Just `make run`, then pay
+the FET request from a testnet wallet. The default paid action runs with **no
+extra keys** (it replies with a placeholder); set `ASI_ONE_API_KEY` (and
+`pip install openai`) to power it with ASI:One, or edit `run_paid_action()` to
+call your own service.
 
 ---
 

@@ -36,7 +36,7 @@ def _get_asi_client():
     """Lazily build the ASI:One client (OpenAI-compatible). Returns None if the
     `openai` SDK isn't installed or ASI_ONE_API_KEY isn't set — in that case
     `run_paid_action` falls back to a placeholder so the payment loop still
-    works end-to-end with only Stripe keys."""
+    works end-to-end with no extra keys."""
     global _asi_client
     if _asi_client is not None:
         return _asi_client
@@ -116,11 +116,11 @@ async def handle_chat(ctx: Context, sender: str, msg: ChatMessage) -> None:
     if _is_paid_request(text):
         await request_payment_from_user(
             ctx, sender,
-            description="Pay with card or FET to run this request.",
+            description="Pay with FET to run this request.",
             text=text,
         )
         notice = create_text_chat(
-            "Once payment completes (card or FET), I'll reply here with your result."
+            "Once the FET payment completes, I'll reply here with your result."
         )
         log_outbound(ctx, "ChatMessage", sender, "awaiting_payment_notice")
         await ctx.send(sender, notice)
@@ -152,7 +152,7 @@ async def run_paid_action(
       * If ASI_ONE_API_KEY is set (and the `openai` SDK is installed), routes the
         prompt to ASI:One and returns the completion.
       * Otherwise replies with a confirmation placeholder so the full
-        pay -> verify -> deliver loop is demonstrable with only Stripe keys.
+        pay -> verify -> deliver loop is demonstrable with no extra keys.
     """
     prompt = (text or "").strip() or "Say hello."
 

@@ -35,7 +35,8 @@ export function selectedSkillNames(answers) {
   // Every build type we generate speaks the chat protocol (single, chat, and
   // multi-agent are all ASI:One-ready), so chat-protocol always applies.
   if (answers.buildType === "payment_agent") {
-    names.push("chat-protocol", "payment-protocol", "fet-payment-protocol", "stripe-payment-protocol");
+    // FET-only template: ship the chat + FET payment context only.
+    names.push("chat-protocol", "fet-payment-protocol");
   } else {
     names.push("chat-protocol");
   }

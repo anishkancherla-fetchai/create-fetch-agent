@@ -25,7 +25,7 @@ test("selectedSkillNames maps manager + build type to skills", () => {
   );
   assert.deepEqual(
     selectedSkillNames({ pythonManager: "uv", buildType: "payment_agent" }),
-    ["uv-package", "chat-protocol", "payment-protocol", "fet-payment-protocol", "stripe-payment-protocol"],
+    ["uv-package", "chat-protocol", "fet-payment-protocol"],
   );
 });
 
