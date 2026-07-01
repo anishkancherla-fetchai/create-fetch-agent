@@ -38,28 +38,11 @@ export function printAgentverseGuidance(answers, { logger = console } = {}) {
   steps.forEach((s, i) => logger.log(`  ${chalk.cyan(`${i + 1}.`)} ${s}`));
 
   logger.log("");
-  logger.log(chalk.bold("  ✅ Chat protocol: already wired for you."));
+  logger.log(chalk.bold.green("  ✔ Chat protocol: already wired for you."));
   logger.log(
-    chalk.dim(
-      "  Chat only works if the agent publishes the chat protocol manifest — this is the",
-    ),
+    chalk.dim('  Your agent publishes it on startup — look for "Manifest published'),
   );
-  logger.log(
-    chalk.dim(
-      "  #1 thing builders forget. Your generated agent(s) already do it: look for",
-    ),
-  );
-  logger.log(
-    chalk.dim(
-      '  `publish_manifest=True` in the code and "Manifest published successfully:',
-    ),
-  );
-  logger.log(
-    chalk.dim(
-      '  AgentChatProtocol" in the startup logs. (So Agentverse\'s "Add Chat Protocol"',
-    ),
-  );
-  logger.log(chalk.dim("  checklist item is done — connecting the mailbox alone is NOT enough.)"));
+  logger.log(chalk.dim('  successfully: AgentChatProtocol" in the logs.'));
 
   logger.log("");
   logger.log(chalk.dim("  Inspector URL pattern (the agent logs the exact one):"));
@@ -82,11 +65,4 @@ export function printAgentverseGuidance(answers, { logger = console } = {}) {
       ),
     );
   }
-
-  logger.log("");
-  logger.log(
-    chalk.dim(
-      "  Programmatic registration (AGENTVERSE_API_KEY) is documented future work, not v1.",
-    ),
-  );
 }
