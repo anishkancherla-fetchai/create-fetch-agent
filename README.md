@@ -50,6 +50,42 @@ Every build type produces real, runnable code — including the payment agent.
 
 ---
 
+## Non-interactive & flags
+
+Pass flags to skip prompts (handy for scripts, CI, or re-recording demos):
+
+```bash
+# non-interactive scaffold
+npx create-fetch-agent my-bot --type payment --python uv --ai cursor --no-install
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--type <t>` | `single` · `chat` · `multi` · `payment` |
+| `--python <m>` | `uv` · `poetry` · `pip` |
+| `--ai <list>` | comma list: `cursor,claude,antigravity,agents` (or `none`) |
+| `--no-install` | skip installing Python dependencies |
+| `--no-register` | skip the Agentverse registration prompt |
+| `--skills-only` | **add AI-editor context to an existing project** (no scaffolding) |
+| `-h`, `--help` | show usage |
+
+Any prompt whose flag you omit still runs interactively.
+
+### Add context to an existing project (`--skills-only`)
+
+Already have an agent and just want the AI-editor context? Run it **in place** —
+it installs `SKILL.md` files without generating or touching any of your code:
+
+```bash
+# inside your project (or pass a directory), fully non-interactive
+npx create-fetch-agent --skills-only --ai cursor,claude
+
+# pick targets interactively; --type controls which protocol skills get added
+npx create-fetch-agent ./my-existing-agent --skills-only --type payment
+```
+
+---
+
 ## The project shapes
 
 ### Single / chat agent (`Single agent`, `Chat agent`)

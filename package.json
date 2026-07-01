@@ -1,6 +1,6 @@
 {
   "name": "create-fetch-agent",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Scaffold runnable Fetch.ai uAgent projects — single, multi-agent (ASI:One-routed), or pay-to-use (on-chain FET) — with the chat protocol wired in and AI-coding-tool context, in one command.",
   "type": "module",
   "bin": {

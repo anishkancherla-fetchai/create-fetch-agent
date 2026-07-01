@@ -45,6 +45,7 @@ export async function runWizard({
   prompts = defaultPrompts,
   logger = console,
   cwd = process.cwd(),
+  overrides = {},
 } = {}) {
   let projectName = argv[0];
   if (projectName) {
@@ -62,18 +63,22 @@ export async function runWizard({
     });
   }
 
-  const buildType = await prompts.select({
-    message: "What are you building?",
-    choices: [
-      { name: "Single agent", value: "single_agent" },
-      { name: "Chat agent (ASI:One ready)", value: "chat_agent" },
-      { name: "Multiple agents (ASI:One routes between them)", value: "multi_agent" },
-      { name: "Payment agent (FET)", value: "payment_agent" },
-    ],
-  });
+  const buildType =
+    overrides.buildType ??
+    (await prompts.select({
+      message: "What are you building?",
+      choices: [
+        { name: "Single agent", value: "single_agent" },
+        { name: "Chat agent (ASI:One ready)", value: "chat_agent" },
+        { name: "Multiple agents (ASI:One routes between them)", value: "multi_agent" },
+        { name: "Payment agent (FET)", value: "payment_agent" },
+      ],
+    }));
 
   let workers = [];
-  if (buildType === "multi_agent") {
+  if (buildType === "multi_agent" && Array.isArray(overrides.workers) && overrides.workers.length) {
+    workers = overrides.workers.map(normalizeWorkerName).filter(Boolean);
+  } else if (buildType === "multi_agent") {
     const count = await prompts.number({
       message: "How many agents?",
       default: 2,
@@ -106,40 +111,48 @@ export async function runWizard({
     }
   }
 
-  const pythonManager = await prompts.select({
-    message: "Python setup:",
-    choices: [
-      { name: "uv (fast, recommended)", value: "uv" },
-      { name: "poetry", value: "poetry" },
-      { name: "pip + venv", value: "pip" },
-    ],
-    default: "uv",
-  });
+  const pythonManager =
+    overrides.pythonManager ??
+    (await prompts.select({
+      message: "Python setup:",
+      choices: [
+        { name: "uv (fast, recommended)", value: "uv" },
+        { name: "poetry", value: "poetry" },
+        { name: "pip + venv", value: "pip" },
+      ],
+      default: "uv",
+    }));
 
-  const aiTargets = await prompts.checkbox({
-    message: "Add AI-editor context? (Space to select, Enter to confirm; none = skip)",
-    choices: [
-      { name: "Cursor", value: "cursor" },
-      { name: "Claude Code", value: "claude" },
-      { name: "Antigravity", value: "antigravity" },
-      { name: "AGENTS.md", value: "agents" },
-    ],
-    required: false,
-  });
+  const aiTargets =
+    overrides.aiTargets ??
+    (await prompts.checkbox({
+      message: "Add AI-editor context? (Space to select, Enter to confirm; none = skip)",
+      choices: [
+        { name: "Cursor", value: "cursor" },
+        { name: "Claude Code", value: "claude" },
+        { name: "Antigravity", value: "antigravity" },
+        { name: "AGENTS.md", value: "agents" },
+      ],
+      required: false,
+    }));
 
-  const registerNow = await prompts.select({
-    message: "Register on Agentverse now?",
-    choices: [
-      { name: "Later (just show me the steps)", value: false },
-      { name: "Yes, show me now", value: true },
-    ],
-    default: false,
-  });
+  const registerNow =
+    overrides.registerNow ??
+    (await prompts.select({
+      message: "Register on Agentverse now?",
+      choices: [
+        { name: "Later (just show me the steps)", value: false },
+        { name: "Yes, show me now", value: true },
+      ],
+      default: false,
+    }));
 
-  const installNow = await prompts.confirm({
-    message: "Install Python dependencies now?",
-    default: true,
-  });
+  const installNow =
+    overrides.installNow ??
+    (await prompts.confirm({
+      message: "Install Python dependencies now?",
+      default: true,
+    }));
 
   return {
     projectName,
