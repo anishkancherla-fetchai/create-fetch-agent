@@ -15,7 +15,10 @@ export const PYTHON_MANAGERS = ["uv", "poetry", "pip"];
 export const AI_TARGETS = ["cursor", "claude", "antigravity", "agents"];
 
 // Flags that consume the following token as their value (e.g. `--ai cursor`).
-const VALUE_FLAGS = new Set(["ai", "type", "python"]);
+const VALUE_FLAGS = new Set(["ai", "type", "python", "agents", "count"]);
+
+// Default agent names for `--count` (mirrors the wizard's defaults).
+const DEFAULT_AGENT_NAMES = ["alice", "bob", "carol", "dave", "erin", "frank"];
 
 const TYPE_ALIASES = {
   single: "single_agent",
@@ -154,6 +157,31 @@ export function parseAiTargets(value) {
 }
 
 /**
+ * Parse `--agents alice,bob` into a name list. Throws if empty.
+ */
+export function parseAgents(value) {
+  const names = String(value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (names.length === 0) {
+    throw new Error(`--agents needs at least one name, e.g. --agents alice,bob`);
+  }
+  return names;
+}
+
+/**
+ * Turn `--count N` into a list of default agent names. Throws outside 1..10.
+ */
+export function defaultAgentNames(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 10) {
+    throw new Error(`--count must be an integer between 1 and 10 (got "${value}").`);
+  }
+  return Array.from({ length: n }, (_, i) => DEFAULT_AGENT_NAMES[i] || `agent${i + 1}`);
+}
+
+/**
  * Map parsed flags to wizard `overrides` (only keys that were actually passed).
  * Prompts are skipped for any key present here. Throws on invalid values.
  *
@@ -171,6 +199,11 @@ export function flagsToOverrides(flags) {
   }
   if (flags.ai !== undefined && flags.ai !== true) {
     overrides.aiTargets = parseAiTargets(flags.ai);
+  }
+  if (flags.agents !== undefined && flags.agents !== true) {
+    overrides.workers = parseAgents(flags.agents);
+  } else if (flags.count !== undefined && flags.count !== true) {
+    overrides.workers = defaultAgentNames(flags.count);
   }
   if (flags["no-install"]) overrides.installNow = false;
   if (flags.install) overrides.installNow = true;

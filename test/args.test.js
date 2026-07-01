@@ -6,6 +6,8 @@ import {
   normalizeType,
   normalizeManager,
   parseAiTargets,
+  parseAgents,
+  defaultAgentNames,
   flagsToOverrides,
   isSkillsOnly,
 } from "../src/args.js";
@@ -67,6 +69,25 @@ test("flagsToOverrides only sets keys that were passed", () => {
     flagsToOverrides({ type: "single", python: "poetry", ai: "none", "no-install": true }),
     { buildType: "single_agent", pythonManager: "poetry", aiTargets: [], installNow: false },
   );
+});
+
+test("parseAgents / defaultAgentNames build multi-agent worker lists", () => {
+  assert.deepEqual(parseAgents("alice, bob"), ["alice", "bob"]);
+  assert.throws(() => parseAgents(""));
+  assert.deepEqual(defaultAgentNames(3), ["alice", "bob", "carol"]);
+  assert.throws(() => defaultAgentNames(0));
+  assert.throws(() => defaultAgentNames(99));
+});
+
+test("flagsToOverrides maps --agents and --count to workers", () => {
+  assert.deepEqual(flagsToOverrides({ type: "multi", agents: "alice,bob" }), {
+    buildType: "multi_agent",
+    workers: ["alice", "bob"],
+  });
+  assert.deepEqual(flagsToOverrides({ type: "multi", count: "2" }), {
+    buildType: "multi_agent",
+    workers: ["alice", "bob"],
+  });
 });
 
 test("flagsToOverrides ignores value-flags passed without a value", () => {

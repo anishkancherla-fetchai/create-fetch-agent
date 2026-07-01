@@ -32,6 +32,8 @@ function printHelp(logger) {
   logger.log("");
   logger.log(chalk.bold("Options:"));
   logger.log("  --type <t>        single | chat | multi | payment");
+  logger.log("  --agents <list>   multi only: agent names, e.g. alice,bob");
+  logger.log("  --count <n>       multi only: N agents with default names");
   logger.log("  --python <m>      uv | poetry | pip");
   logger.log("  --ai <list>       cursor,claude,antigravity,agents (or none)");
   logger.log("  --no-install      skip installing Python dependencies");

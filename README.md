@@ -62,6 +62,8 @@ npx create-fetch-agent my-bot --type payment --python uv --ai cursor --no-instal
 | Flag | Purpose |
 | --- | --- |
 | `--type <t>` | `single` · `chat` · `multi` · `payment` |
+| `--agents <list>` | multi only: agent names, e.g. `alice,bob` |
+| `--count <n>` | multi only: N agents with default names |
 | `--python <m>` | `uv` · `poetry` · `pip` |
 | `--ai <list>` | comma list: `cursor,claude,antigravity,agents` (or `none`) |
 | `--no-install` | skip installing Python dependencies |
